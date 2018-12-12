@@ -51,7 +51,7 @@ public:
 
 	Element (Set *set, std::string name);
 
-	std::string toString ();
+	std::string toString (bool rec = false);
 };
 
 
@@ -60,22 +60,25 @@ class Set
 public:
 	MultiSet *multiSet;
 	int dim;
+	int elementNb = 0;
+	int subsetNb = 0;
 		
-	int size = 0;
 	std::string name;
-	std::list<Element*> elements;
+	std::vector<Element*> elements;
 	std::map<std::string,Element*> elementsByName;
 
 	Subset *topSubset = NULL;
-	std::list<Subset*> subsets;
+	std::vector<Subset*> subsets;
 	std::map<std::string,Subset*> subsetsByName;
 	
 	Set (MultiSet *multiset, std::string name);
 
+	Element *getElement (int id);
 	Element *getElement (std::string name);
+	Subset *getSubset (int id);
 	Subset *getSubset (std::string name);
 
-	std::string toString ();
+	std::string toString (bool rec = false);
 };
 
 
@@ -84,38 +87,22 @@ class Subset
 public:
 	Set *set;
 	std::string name;
+	int id;
+
+	bool top = false;
+	bool bot = false;
+	Element *element = NULL;
+
 	std::list<Partition*> partitions;
 
-	Subset (Set *set, std::string name);
-	virtual ~Subset () {}
+	Subset (Set *set, std::string name, bool vTop = false);
+	Subset (Set *set, std::string name, Element *element, bool vTop = false);
 	
 	void getElements (std::list<Element*> &elements);
 
-	std::string toString ();
+	std::string toString (bool rec = false);
 };
 
-
-class BotSubset : public Subset
-{
-public:
-	Element *element;
-	BotSubset (Set *set, std::string name, Element *element);
-	BotSubset (Set *set, std::string name, std::string elementName);
-};
-
-
-class MidSubset : public Subset
-{
-public:
-	MidSubset (Set *set, std::string name);
-};
-
-
-class TopSubset : public Subset
-{
-public:
-	TopSubset (Set *set, std::string name);
-};
 
 
 class Partition
@@ -128,7 +115,7 @@ public:
 	Partition (Subset *subset, std::list<Subset*> subsets);
 	//Partition (Subset *subset, std::list<std::string> subsetNames);
 	
-	std::string toString ();
+	std::string toString (bool rec = false);
 };
 
 
@@ -147,52 +134,76 @@ public:
 
 	int addElement (Element *element);
 
-	std::string toString ();
+	std::string toString (bool rec = false);
 };
 
 
 class MultiSet
 {
 public:
-	std::string name;
 	int dim = 0;
-	int size = 1;
+	std::string name;
+	int multiElementNb = 1;
+	int multiSubsetNb = 1;
 
 	std::vector<Set*> sets;
 	std::map<std::string,Set*> setsByName;
 
 	std::vector<MultiElement*> multiElements;
 
-	Subset *topMultiSubset = NULL;
-	std::list<Subset*> multiSubsets;
+	MultiSubset *topMultiSubset = NULL;
+	std::vector<MultiSubset*> multiSubsets;
 
 	MultiSet (std::string name);
 
+	void buildMultiElements ();
+	void buildMultiSubsets ();
+	void buildMultiPartitions ();
+
+	MultiPartition *getMultiPartition (double lambda);
+
 	Set *getSet (std::string name);
 	
-	void buildMultiElements (double value);
 	void setMultiElement (std::string *names, double value);
 	MultiElement *getMultiElement (std::string *names);
+	MultiElement *getMultiElement (std::list<Element*>::iterator *elementIterators);
+
+	MultiSubset *getMultiSubset (std::vector<Subset*> subsets);
 	
-	std::string toString ();
+	std::string toString (bool rec = false);
 };
 
 
 class MultiSubset
 {
 public:
+	int id;
 	int dim;
 	std::vector<Subset*> subsets;
+	MultiSet *multiSet;
+
+	bool top = false;
+	bool bot = false;
+
+	int multiElementNb = 0;
+	double sumValue = std::numeric_limits<double>::quiet_NaN();
+	double sumInfo = std::numeric_limits<double>::quiet_NaN();
 
 	double cost = std::numeric_limits<double>::quiet_NaN();
 	double optimalCost = std::numeric_limits<double>::quiet_NaN();
-
-	std::list<MultiPartition*> multiPartitions;
 	MultiPartition *optimalMultiPartition = NULL;
 
-	// void computeMultiPartitions ();
-	// double computeCost ();
-	// double computeOptimalCost ();
+	std::list<MultiPartition*> multiPartitions;
+
+	void computeCost ();
+	void computeOptimalCost (double lambda);
+	
+	MultiSubset (MultiSet *multiSet);
+
+	int addSubset (Subset *subset);
+	void getMultiElements (std::list<MultiElement*> &multiElements);
+
+	std::string toString (bool rec = false);
 };
 
 
@@ -201,4 +212,8 @@ class MultiPartition
 public:
 	int dim;
 	std::list<MultiSubset*> multiSubsets;
+
+	MultiPartition (int dim);
+
+	std::string toString (bool rec = false);
 };
