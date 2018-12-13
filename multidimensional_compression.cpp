@@ -1,4 +1,4 @@
-// -*- compile-command: "g++ -Wall -std=c++11 multidimensional_compression.cpp -o multidimensional_compression"; -*-
+// -*- compile-command: "g++ -Wall -g -std=c++11 multidimensional_compression.cpp -o multidimensional_compression"; -*-
 
 /*
  * This file is part of Multidimensional Compression.
@@ -44,80 +44,26 @@ int main (int argc, char *argv[])
 {
     srand (time (NULL));
 
-	// Build multiset
 	MultiSet *ABC = new MultiSet ("ABC");
 
-	// Build sets
 	Set *A = new Set (ABC, "A");
-	Element *a1 = new Element (A, "a1");
-	Element *a2 = new Element (A, "a2");
-	Element *a3 = new Element (A, "a3");
-	Element *a4 = new Element (A, "a4");
+	A->setElements ("A.csv");
 
 	Set *B = new Set (ABC, "B");
-	Element *b1 = new Element (B, "b1");
-	Element *b2 = new Element (B, "b2");
-	Element *b3 = new Element (B, "b3");
+	B->setElements ("B.csv");
 	
 	Set *C = new Set (ABC, "C");
-	Element *c1 = new Element (C, "c1");
-	Element *c2 = new Element (C, "c2");
+	C->setElements ("C.csv");
 
-	// Build susbets
-	Subset *A1 = new Subset (A, "A1", a1);
-	Subset *A2 = new Subset (A, "A2", a2);
-	Subset *A3 = new Subset (A, "A3", a3);
-	Subset *A4 = new Subset (A, "A4", a4);
-	
-	Subset *A12 = new Subset (A, "A12");
-	new Partition (A12, {A1, A2});
-
-	Subset *A34 = new Subset (A, "A34");
-	new Partition (A34, {A3, A4});
-
-	Subset *A1234 = new Subset (A, "A1234", true);
-	new Partition (A1234, {A12, A34});
-
-	
-	Subset *B1 = new Subset (B, "B1", b1);
-	Subset *B2 = new Subset (B, "B2", b2);
-	Subset *B3 = new Subset (B, "B3", b3);
-	
-	Subset *B12 = new Subset (B, "B12");
-	new Partition (B12, {B1, B2});
-
-	Subset *B23 = new Subset (B, "B23");
-	new Partition (B23, {B2, B3});
-	
-	Subset *B123 = new Subset (B, "B123", true);
-	new Partition (B123, {B1, B23});
-	new Partition (B123, {B12, B3});
-
-
-	Subset *C1 = new Subset (C, "C1", c1);
-	Subset *C2 = new Subset (C, "C2", c2);
-
-	Subset *C12 = new Subset (C, "C12", true);
-	new Partition (C12, {C1, C2});
-
-
-	// Fill multiset
 	ABC->buildMultiElements ();
-
-	// std::string names [3] = {"a3","b2","c1"};
-	// ABC->setMultiElement (names, 2);
-	ABC->setMultiElements ("data.csv");
+	ABC->setMultiElements ("ABC.csv");
+	std::cout << ABC->toString(true) << std::endl;
 
 	ABC->buildMultiSubsets ();
 	
-	// Print multiset
-	std::cout << ABC->toString (true) << std::endl;
+	std::cout << ABC->toString(true) << std::endl;
 
-	std::cout << ABC->getMultiPartition(0.1)->toString (true) << std::endl;
-	std::cout << ABC->getMultiPartition(1.0)->toString (true) << std::endl;
-	std::cout << ABC->getMultiPartition(10.0)->toString (true) << std::endl;
-	std::cout << ABC->getMultiPartition(100.0)->toString (true) << std::endl;
-	std::cout << ABC->getMultiPartition(1000.0)->toString (true) << std::endl;
+	std::cout << ABC->getMultiPartition(100)->toString(true) << std::endl;
 
 	return EXIT_SUCCESS;
 }
@@ -144,13 +90,78 @@ Set::Set (MultiSet *vMultiSet, std::string vName) : multiSet (vMultiSet), name (
 }
 
 
+void Set::setElements (std::string filename)
+{
+	std::ifstream file (filename);
+	std::string line;
+
+	std::string temp;
+	std::list<std::string> names;
+	Subset *subset = NULL;
+	
+	while (std::getline (file, line))
+	{
+		//std::cout << "LINE: " << line << std::endl;
+		names.clear();
+		std::istringstream iss (line);
+		while (iss >> temp) names.push_back (temp); //		std::cout << "WORD: " << temp << std::endl;}
+
+
+		if (names.size() == 0) continue;
+		
+		if (names.size() == 1) {
+			if (getElement (names.front()) != NULL) { std::cout << "WARNING: Element '" << names.front() << "' appears several times in '" << filename << std::endl; continue; }
+			new Element (this, names.front());
+			continue;
+		}
+		
+		std::string subsetName = names.front();
+		names.pop_front();
+
+		subset = getSubset (subsetName);
+		if (subset == NULL) {
+			Element *element = getElement (names.front());
+			if (element != NULL) {
+				if (names.size() > 2) { std::cout << "WARNING: Only one element can be specified for subset '" << subsetName << "' in file " << filename << std::endl; continue; }
+				subset = new Subset (this, subsetName, element);
+				continue;
+			}
+			else { subset = new Subset (this, subsetName); }
+		}
+
+		std::list<Subset*> subsets;
+		for (std::string nextSubsetName : names) {
+			Subset *nextSubset = getSubset (nextSubsetName);
+			if (nextSubset == NULL) { std::cout << "WARNING: Unknown subset '" << nextSubsetName << "' after subset '" << subsetName << "' in file " << filename << std::endl; continue; }
+			subsets.push_back (nextSubset);
+		}
+		new Partition (subset, subsets);
+	}
+
+	if (subset != NULL) { subset->top = true; }
+	else { std::cout << "WARNING: No top subset in file " << filename << std::endl; }
+	
+	file.close();
+}
+
+
 Element *Set::getElement (int id) { return elements[id]; }
 
-Element *Set::getElement (std::string name) { return elementsByName.at (name); }
+Element *Set::getElement (std::string name)
+{
+	std::map<std::string,Element*>::iterator it = elementsByName.find (name);
+	if (it == elementsByName.end()) return NULL;
+	return it->second;
+}
 
 Subset *Set::getSubset (int id) { return subsets[id]; }
 
-Subset *Set::getSubset (std::string name) { return subsetsByName.at (name); }
+Subset *Set::getSubset (std::string name)
+{
+	std::map<std::string,Subset*>::iterator it = subsetsByName.find (name);
+	if (it == subsetsByName.end()) return NULL;
+	return it->second;
+}
 
 
 std::string Set::toString (bool rec)
@@ -188,7 +199,6 @@ Subset::Subset (Set *vSet, std::string vName, Element *vElement, bool vTop) : Su
 
 void Subset::getElements (std::list<Element*> &elements)
 {
-	elements.clear();	
 	if (bot) { elements.push_back (element); }
 	else {
 		if (partitions.size() == 0) { std::cerr << "ERROR: No partition found on intermediate subset '" << name << "' of set '" << set->name << "'" << std::endl; return; }
@@ -376,8 +386,8 @@ void MultiSet::buildMultiSubsets ()
 	int id = 0;
 	bool stop = false;
 	do {
-		MultiSubset *multiSubset = new MultiSubset (0);
-		multiSubset->multiSet = this;
+		MultiSubset *multiSubset = new MultiSubset (this);
+		multiSubsets.push_back (multiSubset);
 
 		multiSubset->id = id++;
 		multiSubset->top = true;
@@ -387,21 +397,22 @@ void MultiSet::buildMultiSubsets ()
 			multiSubset->top = multiSubset->top && (*subsetIterators[d])->top;
 			multiSubset->bot = multiSubset->bot && (*subsetIterators[d])->bot;
 		}
-				
-		multiSubsets.push_back (multiSubset);
+
 		if (multiSubset->top) topMultiSubset = multiSubset;
-				
+
 		stop = true;
 		for (int d = 0; d < dim; d++) {
 			subsetIterators[d]++;
 			if (subsetIterators[d] != sets[d]->subsets.end()) { stop = false; d = dim; }
 			else { subsetIterators[d] = sets[d]->subsets.begin(); }
 		}
-	} while (! stop);	
-
+	} while (! stop);
+	
 	for (MultiSubset *multiSubset : multiSubsets) {
 		multiSubset->multiPartitions.clear();
 
+		std::cout << multiSubset->toString() << std::endl;
+	
 		std::vector<Subset*> buildingSubsets (multiSubset->subsets);
 		for (int d = 0; d < multiSubset->dim; d++) {
 			for (Partition *partition : multiSubset->subsets[d]->partitions) {
@@ -484,6 +495,9 @@ std::string MultiSet::toString (bool rec)
 	return str;
 }
 
+
+
+MultiSubset::MultiSubset (MultiSet *vMultiSet) : multiSet (vMultiSet) {}
 
 
 int MultiSubset::addSubset (Subset *subset)
@@ -579,8 +593,6 @@ void MultiSubset::computeCost (double lambda)
 
 
 
-MultiSubset::MultiSubset (MultiSet *vMultiSet) : multiSet (vMultiSet) {}
-
 
 std::string MultiSubset::toString (bool rec)
 {
@@ -593,10 +605,7 @@ std::string MultiSubset::toString (bool rec)
 	}
 
 	str += "(";
-
-	for (int d = 0; d < dim; d++) {
-		str += subsets[d]->name + ", ";
-	}
+	for (int d = 0; d < dim; d++) { str += subsets[d]->name + ", "; }
 	str += std::to_string (sumValue / multiElementNb) + ")";
 
 	if (rec) {

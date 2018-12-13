@@ -73,6 +73,8 @@ public:
 	
 	Set (MultiSet *multiset, std::string name);
 
+	void setElements (std::string filename);
+	
 	Element *getElement (int id);
 	Element *getElement (std::string name);
 	Subset *getSubset (int id);
@@ -179,7 +181,7 @@ class MultiSubset
 {
 public:
 	int id;
-	int dim;
+	int dim = 0;
 	std::vector<Subset*> subsets;
 	MultiSet *multiSet;
 
