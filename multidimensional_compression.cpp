@@ -32,6 +32,9 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <fstream>
+#include <sstream>
+
 #include <limits>
 #include <cmath>
 
@@ -100,16 +103,21 @@ int main (int argc, char *argv[])
 
 	// Fill multiset
 	ABC->buildMultiElements ();
-	
-	std::string names [3] = {"a3","b2","c1"};
-	ABC->setMultiElement (names, 2);
+
+	// std::string names [3] = {"a3","b2","c1"};
+	// ABC->setMultiElement (names, 2);
+	ABC->setMultiElements ("data.csv");
 
 	ABC->buildMultiSubsets ();
 	
 	// Print multiset
 	std::cout << ABC->toString (true) << std::endl;
 
-	std::cout << ABC->getMultiPartition(100000.0)->toString() << std::endl;
+	std::cout << ABC->getMultiPartition(0.1)->toString (true) << std::endl;
+	std::cout << ABC->getMultiPartition(1.0)->toString (true) << std::endl;
+	std::cout << ABC->getMultiPartition(10.0)->toString (true) << std::endl;
+	std::cout << ABC->getMultiPartition(100.0)->toString (true) << std::endl;
+	std::cout << ABC->getMultiPartition(1000.0)->toString (true) << std::endl;
 
 	return EXIT_SUCCESS;
 }
@@ -331,6 +339,27 @@ void MultiSet::setMultiElement (std::string *names, double value)
 }
 
 
+void MultiSet::setMultiElements (std::string filename)
+{
+	std::ifstream file (filename);
+	std::string line;
+	std::string *cells = new std::string [dim];
+	double value;
+	
+	while (std::getline (file, line))
+	{
+		std::istringstream iss (line);
+		for (int d = 0; d < dim; d++) { if (! (iss >> cells[d])) break; }
+		if (! (iss >> value)) break;
+
+		setMultiElement (cells, value);
+	}
+
+	file.close();
+	delete [] cells;
+}
+
+
 void MultiSet::buildMultiSubsets ()
 {
 	multiSubsetNb = 1;
@@ -381,7 +410,7 @@ void MultiSet::buildMultiSubsets ()
 				
 				for (Subset *subset : partition->subsets) {
 					buildingSubsets[d] = subset;
-					multiPartition->multiSubsets.push_back (getMultiSubset (buildingSubsets));
+					multiPartition->addMultiSubset (getMultiSubset (buildingSubsets));
 				}
 			}
 			
@@ -389,7 +418,8 @@ void MultiSet::buildMultiSubsets ()
 		}
 	}
 
-	topMultiSubset->computeCost();
+	topMultiSubset->computeLoss();
+	for (MultiSubset *multiSubset : multiSubsets) { multiSubset->loss /= topMultiSubset->sumValue; }
 }
 
 
@@ -406,7 +436,8 @@ MultiSubset *MultiSet::getMultiSubset (std::vector<Subset*> subsets)
 
 MultiPartition *MultiSet::getMultiPartition (double lambda)
 {
-	topMultiSubset->computeOptimalCost (lambda);
+	for (MultiSubset *multiSubset : multiSubsets) { multiSubset->cost = std::numeric_limits<double>::quiet_NaN(); }	
+	topMultiSubset->computeCost (lambda);
 
 	MultiPartition *multiPartition = new MultiPartition (dim);
 	std::list<MultiSubset*> subsetQueue;
@@ -416,9 +447,9 @@ MultiPartition *MultiSet::getMultiPartition (double lambda)
 		MultiSubset *multiSubset = subsetQueue.front();
 		subsetQueue.pop_front();
 
-		if (multiSubset->optimalMultiPartition == NULL) { multiPartition->multiSubsets.push_back (multiSubset); }
+		if (multiSubset->multiPartition == NULL) { multiPartition->addMultiSubset (multiSubset); }
 		else {
-			for (MultiSubset *nextMultiSubset : multiSubset->optimalMultiPartition->multiSubsets) { subsetQueue.push_back (nextMultiSubset); }
+			for (MultiSubset *nextMultiSubset : multiSubset->multiPartition->multiSubsets) { subsetQueue.push_back (nextMultiSubset); }
 		}
 	}
 
@@ -489,9 +520,9 @@ void MultiSubset::getMultiElements (std::list<MultiElement*> &multiElements)
 }
 
 
-void MultiSubset::computeCost ()
+void MultiSubset::computeLoss ()
 {
-	if (! std::isnan (cost)) return;
+	if (! std::isnan (loss)) return;
 
 	sumValue = 0;
 	sumInfo = 0;
@@ -499,7 +530,7 @@ void MultiSubset::computeCost ()
 	
 	if (multiPartitions.size() > 0) {
 		for (MultiPartition *multiPartition : multiPartitions) {	
-			for (MultiSubset *multiSubset : multiPartition->multiSubsets) multiSubset->computeCost();
+			for (MultiSubset *multiSubset : multiPartition->multiSubsets) multiSubset->computeLoss();
 		}
 		for (MultiSubset *multiSubset : multiPartitions.front()->multiSubsets) {
 			sumValue += multiSubset->sumValue;
@@ -514,31 +545,33 @@ void MultiSubset::computeCost ()
 		for (MultiElement *multiElement : multiElements)
 		{
 			sumValue += multiElement->value;
-			sumInfo += multiElement->value * log2 (multiElement->value);
+			if (multiElement->value > 0) { sumInfo -= multiElement->value * log2 (multiElement->value); }
 			multiElementNb++;
 		}
 	}
 
-	cost = sumInfo - sumValue * log2 (sumValue) + sumValue * log2 (multiElementNb);
+	loss = sumValue * log2 (multiElementNb) - sumInfo;
+	if (sumValue > 0) { loss -= sumValue * log2 (sumValue); }
 }
 	
 	
-void MultiSubset::computeOptimalCost (double lambda)
+void MultiSubset::computeCost (double lambda)
 {
-	if (! std::isnan (optimalCost)) return;
+	if (! std::isnan (cost)) return;
 
-	optimalCost = 1 + lambda * cost;
-	optimalMultiPartition = NULL;
+	cost = 1 + lambda * loss;
+	//std::cout << toString() << " " << optimalCost << std::endl;
+	multiPartition = NULL;
 
-	for (MultiPartition *multiPartition : multiPartitions) {
-		double multiPartitionCost = 0;
-		for (MultiSubset *multiSubset : multiPartition->multiSubsets) {
-			multiSubset->computeOptimalCost (lambda);
-			multiPartitionCost += multiSubset->optimalCost;
+	for (MultiPartition *nextMultiPartition : multiPartitions) {
+		double nextCost = 0;
+		for (MultiSubset *multiSubset : nextMultiPartition->multiSubsets) {
+			multiSubset->computeCost (lambda);
+			nextCost += multiSubset->cost;
 		}
-		if (multiPartitionCost < optimalCost) {
-			optimalCost = multiPartitionCost;
-			optimalMultiPartition = multiPartition;
+		if (nextCost < cost) {
+			cost = nextCost;
+			multiPartition = nextMultiPartition;
 		}
 	}
 }
@@ -567,7 +600,7 @@ std::string MultiSubset::toString (bool rec)
 	str += std::to_string (sumValue / multiElementNb) + ")";
 
 	if (rec) {
-		for (MultiPartition *multiPartition : multiPartitions) { str += " " + multiPartition->toString (rec); }
+		for (MultiPartition *multiPartition : multiPartitions) { str += " " + multiPartition->toString (); }
 	}
 
 	return str;
@@ -576,6 +609,16 @@ std::string MultiSubset::toString (bool rec)
 
 MultiPartition::MultiPartition (int vDim) : dim (vDim) {}
 
+
+void MultiPartition::addMultiSubset (MultiSubset *multiSubset)
+{
+	multiSubsets.push_back (multiSubset);
+
+	size++;
+	if (! std::isnan (multiSubset->loss)) loss += multiSubset->loss;
+	if (! std::isnan (multiSubset->cost)) cost += multiSubset->cost;
+
+}
 
 std::string MultiPartition::toString (bool rec)
 {
@@ -589,6 +632,8 @@ std::string MultiPartition::toString (bool rec)
 	}
 
 	str += "}";
+
+	if (rec) str += " -> size = " + std::to_string (size) + " / loss = " + std::to_string (loss) + " / cost = " + std::to_string (cost);
 
 	return str;
 }

@@ -158,13 +158,14 @@ public:
 
 	void buildMultiElements ();
 	void buildMultiSubsets ();
-	void buildMultiPartitions ();
 
 	MultiPartition *getMultiPartition (double lambda);
 
 	Set *getSet (std::string name);
-	
+
 	void setMultiElement (std::string *names, double value);
+	void setMultiElements (std::string fileName);
+	
 	MultiElement *getMultiElement (std::string *names);
 	MultiElement *getMultiElement (std::list<Element*>::iterator *elementIterators);
 
@@ -189,14 +190,14 @@ public:
 	double sumValue = std::numeric_limits<double>::quiet_NaN();
 	double sumInfo = std::numeric_limits<double>::quiet_NaN();
 
+	double loss = std::numeric_limits<double>::quiet_NaN();
 	double cost = std::numeric_limits<double>::quiet_NaN();
-	double optimalCost = std::numeric_limits<double>::quiet_NaN();
-	MultiPartition *optimalMultiPartition = NULL;
+	MultiPartition *multiPartition = NULL;
 
 	std::list<MultiPartition*> multiPartitions;
 
-	void computeCost ();
-	void computeOptimalCost (double lambda);
+	void computeLoss ();
+	void computeCost (double lambda);
 	
 	MultiSubset (MultiSet *multiSet);
 
@@ -213,7 +214,13 @@ public:
 	int dim;
 	std::list<MultiSubset*> multiSubsets;
 
+	int size = 0;
+	double loss = 0;
+	double cost = 0;
+
 	MultiPartition (int dim);
 
+	void addMultiSubset (MultiSubset *multiSubset);
+	
 	std::string toString (bool rec = false);
 };
